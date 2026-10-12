@@ -1,0 +1,43 @@
+---
+- name: Install Docker and Docker Compose
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure keyrings directory exists
+      ansible.builtin.file:
+        path: /usr/share/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg
+      args:
+        creates: /usr/share/keyrings/docker.gpg
+
+    - name: Add Docker APT repository
+      ansible.builtin.copy:
+        content: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable\n"
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: '0644'
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+        update_cache: yes
+        state: present
+
+    - name: Ensure Docker cli-plugins directory exists
+      ansible.builtin.file:
+        path: /usr/local/lib/docker/cli-plugins
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker Compose binary
+      ansible.builtin.get_url:
+        url: "https://github.com/docker/compose/releases/latest/download/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: /usr/local/lib/docker/cli-plugins/docker-compose
+        mode: '0755'

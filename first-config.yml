@@ -1,0 +1,127 @@
+---
+- name: Initial server setup
+  hosts: vps
+  become: true
+
+  vars_files:
+    - ./vars/ssh_config.yml
+    - ./vars/secret.yml
+
+  tasks:
+
+    # -------------------------
+    # Packages
+    # -------------------------
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name: "{{ packages }}"
+        state: present
+
+
+    # -------------------------
+    # User
+    # -------------------------
+
+    - name: Create user
+      ansible.builtin.user:
+        name: "{{ username }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        create_home: true
+
+    - name: Create .ssh directory
+      ansible.builtin.file:
+        path: "/home/{{ username }}/.ssh"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0700'
+
+    - name: Allow user to use sudo without password
+      ansible.builtin.copy:
+        content: "{{ username }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ username }}"
+        owner: root
+        group: root
+        mode: '0440'
+        validate: '/usr/sbin/visudo -cf %s'
+
+    - name: Install SSH public key
+      ansible.builtin.copy:
+        content: "{{ ssh_public_key }}\n"
+        dest: "/home/{{ username }}/.ssh/authorized_keys"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0600'
+
+
+    # -------------------------
+    # SSH
+    # -------------------------
+
+    - name: Configure SSH port
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Port '
+        line: "Port {{ ssh_port }}"
+        state: present
+      notify: Restart SSH
+
+    - name: Disable root SSH login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin '
+        line: 'PermitRootLogin no'
+        state: present
+      notify: Restart SSH
+
+    - name: Disable password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication '
+        line: 'PasswordAuthentication no'
+        state: present
+      notify: Restart SSH
+
+    - name: Disable empty passwords
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitEmptyPasswords '
+        line: 'PermitEmptyPasswords no'
+        state: present
+      notify: Restart SSH
+
+    - name: Validate SSH configuration
+      ansible.builtin.command:
+        cmd: sshd -t
+      changed_when: false
+
+
+    # -------------------------
+    # Fail2ban
+    # -------------------------
+
+    - name: Enable and start fail2ban
+      ansible.builtin.systemd:
+        name: fail2ban.service
+        enabled: true
+        state: started
+
+
+  # -------------------------
+  # Handlers
+  # -------------------------
+
+  handlers:
+
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted

@@ -1,0 +1,18 @@
+---
+packages:
+  - nano
+  - curl
+  - wget
+  - mc
+  - btop
+  - git
+  - unzip
+  - ca-certificates
+  - fail2ban
+  - docker
+
+username: "{{ vault_username }}"
+
+ssh_port: "{{ vault_ssh_port }}"
+
+ssh_public_key: "{{ vault_ssh_public_key }}"
